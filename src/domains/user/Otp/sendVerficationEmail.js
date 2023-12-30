@@ -7,13 +7,13 @@ export const sendOTPVerificationEmail = async ({ _id, email }, res) => {
   try {
     const otp = generateOTP();
     const currentDate = Date.now();
-    const expiresAt = new Date(currentDate + 120000);
+    const expiresAt = new Date(currentDate + 180000);
     const transporter = nodemailer.createTransport({
       host: "smtp.ethereal.email",
       port: 587,
       auth: {
-        user: "dee.walter58@ethereal.email",
-        pass: "hzN35XCcTbwKNBVVcc",
+        user: "britney.swaniawski37@ethereal.email",
+        pass: "F6bhUVZ22uDD5ZCmtZ",
       },
     });
 
@@ -47,10 +47,11 @@ export const sendOTPVerificationEmail = async ({ _id, email }, res) => {
     transporter.sendMail(mailOptions);
     res.json({
       status: "pending",
-      message: "OTP sent to your email",
+      message: "OTP has been sent to your email",
       data: {
         userId: _id,
         email,
+        expiresAt,
       },
     });
   } catch (err) {
