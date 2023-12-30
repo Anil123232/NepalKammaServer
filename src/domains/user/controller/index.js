@@ -9,21 +9,23 @@ import jwt from "jsonwebtoken";
 //create user --> signup
 export const createUser = catchAsync(async (req, res, next) => {
   try {
+    console.log("hitted");
     const { username, email, password, role } = req.body;
     const findEmail = await User.findOne({ email });
     const findUsername = await User.findOne({ username });
+
+    console.log(findEmail);
+
+    if (findUsername && findUsername.isVerified === true) {
+      return res.status(422).json({ message: "Username already exists" });
+    }
     if (findEmail && findEmail.isVerified === true) {
       return res.status(422).json({ message: "Email already exists" });
     }
     if (findEmail && findEmail.isVerified === false) {
-      return res.status(422).json({
-        message:
-          "Your email is not verified, check your gmail and verify it, to login",
-      });
+      await User.findOneAndDelete({ email: findEmail.email });
     }
-    if (findUsername) {
-      return res.status(422).json({ message: "Username already exists" });
-    }
+
     const hashedPassword = await hashPassword(password);
 
     const signupUser = new User({
@@ -33,6 +35,7 @@ export const createUser = catchAsync(async (req, res, next) => {
       role,
       isVerified: false,
     });
+
     await signupUser
       .save()
       .then((result) => {
@@ -53,7 +56,7 @@ export const verifyUser = catchAsync(async (req, res, next) => {
     const { userId, otp } = req.body;
 
     if (!userId || !otp) {
-      return res.json({
+      return res.status(422).json({
         status: "failed",
         message: "All fields are required",
       });
@@ -62,7 +65,7 @@ export const verifyUser = catchAsync(async (req, res, next) => {
     // Retrieve user otp records
     const userOtpRecords = await UserOTPVerification.find({ userId });
     if (userOtpRecords.length <= 0) {
-      return res.json({
+      return res.status(422).json({
         status: "failed",
         message: "Invalid OTP",
       });
@@ -70,7 +73,7 @@ export const verifyUser = catchAsync(async (req, res, next) => {
     const { expiresAt, otp: hashedOTP } = userOtpRecords[0];
     if (expiresAt < Date.now()) {
       await UserOTPVerification.deleteMany({ userId });
-      return res.json({
+      return res.status(422).json({
         status: "failed",
         message: "OTP expired",
       });
@@ -79,7 +82,7 @@ export const verifyUser = catchAsync(async (req, res, next) => {
     const isMatch = await bcrypt.compare(otp, hashedOTP);
 
     if (!isMatch) {
-      return res.json({
+      return res.status(422).json({
         status: "failed",
         message: "Invalid OTP",
       });
@@ -134,11 +137,12 @@ export const resendOTP = catchAsync(async (req, res, next) => {
 });
 
 // login user --> login
+// login user --> login
 export const LoginUser = catchAsync(async (req, res, next) => {
   const { email, password } = req.body;
   const findEmail = await User.findOne({ email });
   if (!findEmail || findEmail == null) {
-    res.status(422).json({ message: "Email not found" });
+    return res.status(422).json({ message: "Email not found" });
   } else {
     if (findEmail.isVerified === true) {
       const decryptPass = await bcrypt.compare(password, findEmail.password);
@@ -151,14 +155,25 @@ export const LoginUser = catchAsync(async (req, res, next) => {
             if (err) {
               return res.status(404).json({ message: "You must login first" });
             }
-            res.status(200).json({ message: "Successfully, logged in", token });
+            const userWithoutPassword = {
+              ...findEmail._doc,
+              password: undefined,
+            };
+            res.status(200).json({
+              status: "success",
+              message: "Successfully, logged in",
+              token,
+              user: userWithoutPassword,
+            });
           }
         );
       } else {
-        res.status(422).json({ message: "Email or Password doesn't match" });
+        return res
+          .status(422)
+          .json({ message: "Email or Password doesn't match" });
       }
     } else {
-      res.status(422).json({ message: "Your email is not verified!" });
+      return res.status(422).json({ message: "Your email is not verified!" });
     }
   }
 });
