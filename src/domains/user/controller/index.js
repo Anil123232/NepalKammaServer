@@ -5,16 +5,15 @@ import { sendOTPVerificationEmail } from "../Otp/sendVerficationEmail.js";
 import UserOTPVerification from "../../../../models/UserOTPVerification.js";
 import { hashPassword } from "../../../utils/hashBcrypt.js";
 import jwt from "jsonwebtoken";
+import cloudinary from "cloudinary";
+import { getDataUri } from "../../../utils/Features.js";
 
 //create user --> signup
 export const createUser = catchAsync(async (req, res, next) => {
   try {
-    console.log("hitted");
-    const { username, email, password, role } = req.body;
+    const { username, email, password, role, gender } = req.body;
     const findEmail = await User.findOne({ email });
     const findUsername = await User.findOne({ username });
-
-    console.log(findEmail);
 
     if (findUsername && findUsername.isVerified === true) {
       return res.status(422).json({ message: "Username already exists" });
@@ -33,6 +32,7 @@ export const createUser = catchAsync(async (req, res, next) => {
       password: hashedPassword,
       username,
       role,
+      gender,
       isVerified: false,
     });
 
@@ -177,3 +177,63 @@ export const LoginUser = catchAsync(async (req, res, next) => {
     }
   }
 });
+
+//edit profile
+export const editProfile = catchAsync(async (req, res, next) => {
+  try {
+    const id = req.params.id;
+    const { username, title, bio, location, about_me, skills } = req.body;
+
+    const user = await User.findByIdAndUpdate(
+      id,
+      {
+        username,
+        title,
+        bio,
+        location,
+        about_me,
+        skills,
+      },
+      { new: true }
+    );
+
+    const { password, ...userWithoutPassword } = user.toObject();
+
+    res.status(200).json({ user: userWithoutPassword });
+  } catch (err) {
+    throw new Error(err);
+  }
+});
+
+//update profile picture
+export const updateProfilePicController = async (req, res) => {
+  try {
+    console.log("called")
+    const user = await User.findById(req.user._id);
+    // file get from client photo
+    const file = getDataUri(req.file);
+    console.log(file.content)
+    // delete prev image
+    await cloudinary.v2.uploader.destroy(user.profilePic.public_id);
+    // update
+    const cdb = await cloudinary.v2.uploader.upload(file.content);
+    user.profilePic = {
+      public_id: cdb.public_id,
+      url: cdb.secure_url,
+    };
+    // save func
+    await user.save();
+
+    res.status(200).send({
+      success: true,
+      message: "Profile picture updated",
+    });
+  } catch (error) {
+    console.log(error);
+    res.status(500).send({
+      success: false,
+      message: "Error In update profile pic API",
+      error,
+    });
+  }
+};
