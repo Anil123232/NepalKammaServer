@@ -43,30 +43,9 @@ app.use("/api/v1/job", job);
 import Gig from "./src/routes/Gig.js";
 app.use("/api/v1/gig", Gig);
 
-// //setting up the multer diskstorage
-// const storage = new multer.diskStorage({
-//   destination: "./public/uploads",
-//   filename: function (req, file, callback) {
-//     callback(
-//       null,
-//       file.fieldname + "-" + Date.now() + "-" + path.extname(file.originalname)
-//     );
-//   },
-// });
-
-// //init the uploads
-// const upload = multer({
-//   storage: storage,
-// });
-
-// // Define the route for uploading files
-// app.post("/upload", upload.single("image"), (req, res) => {
-//   console.log("hitted")
-//   console.log(req)
-//   // Handle the uploaded file here
-//   const imageUrl = `http://localhost:8000/uploads/${req.file.filename}`;
-//   res.json({ imageUrl });
-// });
+// routes for message
+import Message from "./src/routes/Message.js";
+app.use("/api/v1/message", Message);
 
 app.get("/", (req, res) => {
   res.json({

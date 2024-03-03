@@ -34,11 +34,12 @@ const UserInfoSchema = new mongoose.Schema({
   profilePic: {
     public_id: {
       type: String,
-      default: "",
+      default: "https://asset.cloudinary.com/dcnm2ql9y/9cfe2e5781a9c7827b051a34670450e0",
     },
     url: {
       type: String,
-      default: "",
+      default:
+        "https://res.cloudinary.com/dcnm2ql9y/image/upload/v1709398361/vectorstock_42797457_rzmscx.png",
     },
   },
   isTick: {

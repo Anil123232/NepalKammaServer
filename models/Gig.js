@@ -5,11 +5,11 @@ const GigInfoSchema = new mongoose.Schema(
   {
     title: {
       type: String,
-      required: true,
+      default: "",
     },
     gig_description: {
       type: String,
-      required: true,
+      default: "",
     },
     images: [
       {
@@ -25,11 +25,11 @@ const GigInfoSchema = new mongoose.Schema(
     ],
     price: {
       type: Number,
-      required: true,
+      default: 0,
     },
     category: {
       type: String,
-      required: true,
+      default: "",
     },
     postedBy: {
       type: Schema.Types.ObjectId,

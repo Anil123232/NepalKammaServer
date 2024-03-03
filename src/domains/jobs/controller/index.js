@@ -118,10 +118,20 @@ export const nearBy = catchAsync(async (req, res, next) => {
 //recommendation system
 export const recommendationJobs = async (req, res, next) => {
   try {
-    const { id } = req.params;
+    const id = req.user._id;
     if (!id) return res.status(400).json({ message: "id is required" });
     const recommendJobsList = await recommendJobs(id);
-    res.status(200).json({ recommendJobsList });
+
+    // Get the ids of the documents you want to populate
+    const jobIds = recommendJobsList.map((job) => job._id);
+
+    // Populate the referenced fields using find()
+    const populatedJobs = await Job.find({ _id: { $in: jobIds } })
+      .sort({ createdAt: -1 })
+      .populate("postedBy", "username email")
+      .exec();
+
+    res.status(200).json({ recommendJobsList: populatedJobs });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get job" });

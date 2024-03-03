@@ -6,6 +6,7 @@ import cloudinary from "cloudinary";
 // upload images
 export const uploadImages = catchAsync(async (req, res, next) => {
   try {
+    console.log(req.files)
     const files = getDataUris(req.files);
 
     const images = [];
@@ -17,53 +18,43 @@ export const uploadImages = catchAsync(async (req, res, next) => {
         url: cdb.secure_url,
       });
     }
-    
 
+    const imagesData = new Gig({
+      images: images,
+    });
+
+    await imagesData.save();
+
+    res.status(201).json({ message: "Successfully! uploaded", imagesData });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to upload images" });
   }
 });
 
-//create gig
+//create gig or update gig with data
 export const createGig = catchAsync(async (req, res, next) => {
   try {
+    const gig_id = req.params.id;
+    const gig = await Gig.findById(gig_id);
+    if (!gig) {
+      return res.status(404).json({ message: "Gig not found" });
+    }
     const { title, gig_description, price, category } = req.body;
+    // just upadte with this data and i get the id from params
+    const gigData = await Gig.findByIdAndUpdate(
+      gig_id,
+      {
+        title,
+        gig_description,
+        price,
+        category,
+        postedBy: req.user._id,
+      },
+      { new: true }
+    );
 
-    console.log("hitted");
-    // Now you have an array of image URIs in imageURIs
-    console.log(req.body);
-
-    // Convert files to data URIs
-    // const files = getDataUris(imagesData);
-    // console.log(files)
-
-    // Convert data URIs to cloudinary URLs
-    // const images = [];
-    // for (let i = 0; i < files.length; i++) {
-    //   const fileData = files[i];
-    //   const cdb = await cloudinary.v2.uploader.upload(fileData, {});
-    //   images.push({
-    //     public_id: cdb.public_id,
-    //     url: cdb.secure_url,
-    //   });
-    // }
-
-    // Create new gig data
-    // const gigData = new Gig({
-    //   title,
-    //   gig_description,
-    //   images,
-    //   price,
-    //   category,
-    //   postedBy: req.user._id,
-    // });
-
-    // Save gig data to the database
-    // await gigData.save();
-
-    // Respond with success message
-    // res.status(201).json({ message: "Successfully! created" });
+    res.status(201).json({ message: "Successfully! created", gigData });
   } catch (err) {
     console.error(err);
     // Respond with error message

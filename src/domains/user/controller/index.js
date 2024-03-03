@@ -208,11 +208,11 @@ export const editProfile = catchAsync(async (req, res, next) => {
 //update profile picture
 export const updateProfilePicController = async (req, res) => {
   try {
-    console.log("called")
+    console.log("called");
     const user = await User.findById(req.user._id);
     // file get from client photo
     const file = getDataUri(req.file);
-    console.log(file.content)
+    console.log(file.content);
     // delete prev image
     await cloudinary.v2.uploader.destroy(user.profilePic.public_id);
     // update

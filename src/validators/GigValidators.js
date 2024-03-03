@@ -22,10 +22,6 @@ export const createGigValidation = [
     .withMessage("Gig description is required")
     .isString()
     .withMessage("Gig description must be a string"),
-  check("images")
-    .isArray()
-    .withMessage("Images must be an array")
-    .custom(imagesRequiredValidators),
   check("price").isNumeric().withMessage("Price must be a number"),
   check("category")
     .trim()

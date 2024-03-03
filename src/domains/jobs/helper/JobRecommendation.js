@@ -15,7 +15,7 @@ const recommendJobs = async (userId) => {
     }
     const tfidf = new TfIdf();
 
-    // Add user document like title, skills, about_me
+    // title, skills, about_me
     const userDocument = [user.title, ...user.skills, user.about_me].map(
       (term) => stemmer.stem(term)
     );
@@ -30,7 +30,7 @@ const recommendJobs = async (userId) => {
       return { id: job._id.toString(), skills: job.skills_required };
     });
 
-    // Calculate similarity score
+    // similarity score
     const jobsWithScore = jobDocs.map((jobDoc, index) => {
       let totalScore = 0;
       userDocument.forEach((term) => {

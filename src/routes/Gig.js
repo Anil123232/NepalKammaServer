@@ -9,8 +9,8 @@ import { multipleUpload } from "../domains/auth/middlewares/Multer.js";
 const router = express.Router();
 
 router
-  .route("/creategig")
-  .post(
+  .route("/creategig/:id")
+  .put(
     protect,
     permission(["job_seeker"]),
     createGigValidation,
