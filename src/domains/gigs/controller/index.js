@@ -1,4 +1,5 @@
 import Gig from "../../../../models/Gig.js";
+import User from "../../../../models/User.js";
 import { getDataUris } from "../../../utils/Features.js";
 import catchAsync from "../../../utils/catchAsync.js";
 import cloudinary from "cloudinary";
@@ -6,7 +7,6 @@ import cloudinary from "cloudinary";
 // upload images
 export const uploadImages = catchAsync(async (req, res, next) => {
   try {
-    console.log(req.files)
     const files = getDataUris(req.files);
 
     const images = [];
@@ -67,11 +67,128 @@ export const getGig = catchAsync(async (req, res, next) => {
   try {
     const gig = await Gig.find()
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email")
+      .populate("postedBy", "username email profilePic")
       .exec();
     res.status(200).json({ gig });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get gig" });
+  }
+});
+
+//get near by gig
+export const nearByGig = catchAsync(async (req, res, next) => {
+  try {
+    const { latitude, longitude } = req.params;
+    console.log(latitude, longitude);
+    const nearByUser = await User.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [parseFloat(longitude), parseFloat(latitude)],
+          },
+          key: "address.coordinates",
+          maxDistance: parseFloat(10000),
+          distanceField: "dist.calculated",
+          spherical: true,
+        },
+      },
+    ]).exec();
+
+    const userIds = nearByUser.map((user) => user._id);
+    const nearByGigs = await Gig.find({ postedBy: { $in: userIds } })
+      .sort({ createdAt: -1 })
+      .populate("postedBy", "username email profilePic")
+      .exec();
+
+    res.status(200).json({ nearByGigs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get near by gig" });
+  }
+});
+
+// search gig
+export const searchGig = catchAsync(async (req, res, next) => {
+  try {
+    const {
+      text,
+      category,
+      lng,
+      lat,
+      distance,
+      sortByRating,
+      sortByPriceHighToLow,
+      sortByPriceLowToHigh,
+    } = req.query;
+
+    console.log(
+      text,
+      category,
+      lng,
+      lat,
+      distance,
+      sortByRating,
+      sortByPriceHighToLow,
+      sortByPriceLowToHigh
+    );
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    let query = {};
+
+    if (text) {
+      const regex = new RegExp(text, "i");
+      query.$or = [
+        { title: { $regex: regex } },
+        { gig_description: { $regex: regex } },
+      ];
+    }
+
+    const existingCategory = await Gig.findOne({ category });
+    if (category && existingCategory) {
+      query.category = category;
+    }
+
+    // Define the sort order
+    let sort = {};
+    if (sortByRating === "true") {
+      sort.rating = -1;
+    } else if (sortByPriceHighToLow === "true") {
+      sort.price = -1;
+    } else if (sortByPriceLowToHigh === "true") {
+      sort.price = 1;
+    } else {
+      sort.createdAt = -1;
+    }
+
+    // if (lng && lat && distance > 0) {
+    //   const radius = parseFloat(distance) / 6378.1;
+    //   query.address = {
+    //     $geoWithin: {
+    //       $centerSphere: [[parseFloat(lng), parseFloat(lat)], radius],
+    //     },
+    //   };
+    // }
+
+    // Execute the search query
+    const gigs = await Gig.find(query)
+      .sort(sort)
+      .populate("postedBy", "username email profilePic")
+      .skip((page - 1) * limit)
+      .limit(limit);
+
+    const totalGigs = await Gig.countDocuments(query);
+
+    res.status(200).json({
+      success: true,
+      gig: gigs,
+      totalGigs,
+      currentPage: page,
+      totalPages: Math.ceil(totalGigs / limit),
+    });
+  } catch (error) {
+    next(error);
   }
 });

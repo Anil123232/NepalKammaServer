@@ -32,7 +32,7 @@ export const signUpValidation = [
     .withMessage("Role is required")
     .isString()
     .withMessage("Role must be a string")
-    .isIn(["job_provider", "job_seeker"])
+    .isIn(["job_provider", "job_seeker", "admin"])
     .withMessage("Role must be either user or admin"),
 ];
 

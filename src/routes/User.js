@@ -6,6 +6,12 @@ import {
   LoginUser,
   editProfile,
   updateProfilePicController,
+  updatePhoneNumber,
+  uploadDocuments,
+  getSingleUser,
+  getAllJobSeekers,
+  nearByJobSeekers,
+  searchUser,
 } from "../domains/user/controller/index.js";
 import {
   loginValidation,
@@ -13,7 +19,10 @@ import {
   signupValidationResult,
 } from "../validators/UserValidators.js";
 import { protect } from "../domains/auth/middlewares/auth.js";
-import { singleUpload } from "../domains/auth/middlewares/Multer.js";
+import {
+  multipleUpload,
+  singleUpload,
+} from "../domains/auth/middlewares/Multer.js";
 const router = express.Router();
 
 router
@@ -29,6 +38,28 @@ router.route("/login").post(loginValidation, signupValidationResult, LoginUser);
 router.route(`/edit-profile/:id`).put(protect, editProfile);
 
 // update profile pic
-router.route("/update-picture").put(protect, singleUpload, updateProfilePicController);
+router
+  .route("/update-picture")
+  .put(protect, singleUpload, updateProfilePicController);
+
+// update phone number
+router.route("/update-phone").put(protect, updatePhoneNumber);
+
+//update documents
+router.route("/upload-document").post(protect, multipleUpload, uploadDocuments);
+
+//get single user
+router.route("/user/:id").get(protect, getSingleUser);
+
+//get all job seekers
+router.route("/job-seeker").get(protect, getAllJobSeekers);
+
+//near by job seekers
+router
+  .route(`/getNearbyJobSeeker/:latitude/:longitude`)
+  .get(protect, nearByJobSeekers);
+
+//search user by username
+router.route(`/search-user/:username`).get(protect, searchUser);
 
 export default router;

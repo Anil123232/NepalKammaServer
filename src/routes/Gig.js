@@ -1,6 +1,6 @@
 import express from "express";
 import { protect, permission } from "../domains/auth/middlewares/auth.js";
-import { createGig, getGig, uploadImages } from "../domains/gigs/controller/index.js";
+import { createGig, getGig, nearByGig, searchGig, uploadImages } from "../domains/gigs/controller/index.js";
 import {
   createGigValidation,
   createGigValidationResult,
@@ -21,7 +21,9 @@ router
 router
   .route("/upload-photo")
   .post(protect, multipleUpload, permission(["job_seeker"]), uploadImages);
-
+router.route(`/getNearbyGig/:latitude/:longitude`).get(protect, nearByGig);
 router.route("/").get(protect, getGig);
+router.route(`/searchgig`).get(protect, searchGig)
+
 
 export default router;

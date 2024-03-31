@@ -44,10 +44,6 @@ const recommendJobs = async (userId) => {
       };
     });
 
-    console.log(tfidf);
-    console.log(jobDocs);
-    console.log(jobsWithScore);
-
     const sortedJobs = jobsWithScore.sort(
       (a, b) => b.similarityScore - a.similarityScore
     );
@@ -64,7 +60,7 @@ const recommendJobs = async (userId) => {
     });
     return recommendedJobs;
   } catch (err) {
-    console.log(err);
+    res.status(500).json({ message: "Failed to recommend jobs" });
     throw new Error("Error in recommendJobs function");
   }
 };

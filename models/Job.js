@@ -54,15 +54,29 @@ const JobInfoSchema = new mongoose.Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    rating: {
+      type: Number,
+      default: 0,
+    },
+    job_status: {
+      type: String,
+      enum: ["Pending", "In_Progress", "Completed", "Cancelled", "Paid"],
+      default: "Pending",
+    },
+    assignedTo: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
 
+JobInfoSchema.index({ title: "text", job_description: "text" });
 // Create the geospatial index
 JobInfoSchema.index({ "address.coordinates": "2dsphere" });
-
 
 const Job = mongoose.model("Job", JobInfoSchema);
 

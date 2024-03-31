@@ -6,7 +6,8 @@ import UserOTPVerification from "../../../../models/UserOTPVerification.js";
 import { hashPassword } from "../../../utils/hashBcrypt.js";
 import jwt from "jsonwebtoken";
 import cloudinary from "cloudinary";
-import { getDataUri } from "../../../utils/Features.js";
+import { getDataUri, getDataUris } from "../../../utils/Features.js";
+import Job from "../../../../models/Job.js";
 
 //create user --> signup
 export const createUser = catchAsync(async (req, res, next) => {
@@ -182,7 +183,16 @@ export const LoginUser = catchAsync(async (req, res, next) => {
 export const editProfile = catchAsync(async (req, res, next) => {
   try {
     const id = req.params.id;
-    const { username, title, bio, location, about_me, skills } = req.body;
+    const {
+      username,
+      title,
+      bio,
+      about_me,
+      skills,
+      location,
+      latitude,
+      longitude,
+    } = req.body;
 
     const user = await User.findByIdAndUpdate(
       id,
@@ -191,6 +201,9 @@ export const editProfile = catchAsync(async (req, res, next) => {
         title,
         bio,
         location,
+        address: {
+          coordinates: [longitude, latitude],
+        },
         about_me,
         skills,
       },
@@ -208,11 +221,9 @@ export const editProfile = catchAsync(async (req, res, next) => {
 //update profile picture
 export const updateProfilePicController = async (req, res) => {
   try {
-    console.log("called");
     const user = await User.findById(req.user._id);
     // file get from client photo
     const file = getDataUri(req.file);
-    console.log(file.content);
     // delete prev image
     await cloudinary.v2.uploader.destroy(user.profilePic.public_id);
     // update
@@ -229,7 +240,6 @@ export const updateProfilePicController = async (req, res) => {
       message: "Profile picture updated",
     });
   } catch (error) {
-    console.log(error);
     res.status(500).send({
       success: false,
       message: "Error In update profile pic API",
@@ -237,3 +247,146 @@ export const updateProfilePicController = async (req, res) => {
     });
   }
 };
+
+// update phone number
+export const updatePhoneNumber = async (req, res) => {
+  try {
+    const { phone } = req.body;
+    console.log(phone);
+    const existingUser = await User.findOne({
+      phoneNumber: phone,
+      _id: { $ne: req.user._id },
+    });
+    if (existingUser) {
+      return res.status(400).send({
+        success: false,
+        message: "Phone number already exists",
+      });
+    }
+
+    const user = await User.findById(req.user._id);
+    console.log(user);
+    user.phoneNumber = phone;
+    await user.save();
+    res.status(200).send({
+      success: true,
+      message: "Phone number updated",
+    });
+  } catch (error) {
+    res.status(500).send({
+      success: false,
+      message: "Error In update phone number API",
+      error,
+    });
+  }
+};
+
+// upload document
+export const uploadDocuments = catchAsync(async (req, res, next) => {
+  try {
+    const files = getDataUris(req.files);
+
+    const user = await User.findById(req.user._id);
+
+    const images = [];
+    for (let i = 0; i < files.length; i++) {
+      const fileData = files[i];
+      const cdb = await cloudinary.v2.uploader.upload(fileData, {});
+      images.push({
+        public_id: cdb.public_id,
+        url: cdb.secure_url,
+      });
+    }
+
+    user.documents = images;
+    user.isDocumentVerified = "Pending";
+    await user.save();
+
+    res.status(201).json({ message: "Successfully! uploaded" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to upload images" });
+  }
+});
+
+//get single user
+export const getSingleUser = catchAsync(async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    // Get user details excluding password
+    const user = await User.findById(userId).select("-password");
+
+    // Get all jobs posted by the user
+    const userJobs = await Job.find({ postedBy: userId })
+      .populate("postedBy", "username email profilePic")
+      .populate("assignedTo", "username email profilePic");
+
+    res.status(200).json({ user, userJobs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get user and their jobs" });
+  }
+});
+
+// get all users who are job seekers
+export const getAllJobSeekers = catchAsync(async (req, res, next) => {
+  try {
+    const users = await User.find({ role: "job_seeker" }).select(
+      "-password -documents"
+    );
+
+    res.status(200).json({ users });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get job seekers" });
+  }
+});
+
+// get all nearby users who are job seekers
+export const nearByJobSeekers = catchAsync(async (req, res, next) => {
+  try {
+    const { latitude, longitude } = req.params;
+
+    const nearBy = await User.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [parseFloat(longitude), parseFloat(latitude)],
+          },
+          distanceField: "dist.calculated",
+          maxDistance: parseFloat(10000),
+          spherical: true,
+        },
+      },
+      {
+        $match: {
+          role: "job_seeker",
+        },
+      },
+    ]).project("-password -documents");
+
+    res.status(200).json({ nearBy });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get nearby jobseekers" });
+  }
+});
+
+//search user by username and who role is job_seeker
+export const searchUser = catchAsync(async (req, res, next) => {
+  try {
+    const { username } = req.params;
+
+    const user = await User.find({
+      username: { $regex: new RegExp(`^${username}$`, "i") },
+      role: "job_seeker",
+    }).select("-password -documents");
+
+    res.status(200).json({ user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to search user" });
+  }
+});

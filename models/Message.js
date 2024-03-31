@@ -10,8 +10,16 @@ const Message = new mongoose.Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    recipientId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
     msg: {
       type: String,
+    },
+    isRead: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }
