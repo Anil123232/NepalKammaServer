@@ -67,7 +67,7 @@ export const getGig = catchAsync(async (req, res, next) => {
   try {
     const gig = await Gig.find()
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .exec();
     res.status(200).json({ gig });
   } catch (err) {
@@ -80,7 +80,6 @@ export const getGig = catchAsync(async (req, res, next) => {
 export const nearByGig = catchAsync(async (req, res, next) => {
   try {
     const { latitude, longitude } = req.params;
-    console.log(latitude, longitude);
     const nearByUser = await User.aggregate([
       {
         $geoNear: {
@@ -99,7 +98,7 @@ export const nearByGig = catchAsync(async (req, res, next) => {
     const userIds = nearByUser.map((user) => user._id);
     const nearByGigs = await Gig.find({ postedBy: { $in: userIds } })
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .exec();
 
     res.status(200).json({ nearByGigs });
@@ -122,17 +121,6 @@ export const searchGig = catchAsync(async (req, res, next) => {
       sortByPriceHighToLow,
       sortByPriceLowToHigh,
     } = req.query;
-
-    console.log(
-      text,
-      category,
-      lng,
-      lat,
-      distance,
-      sortByRating,
-      sortByPriceHighToLow,
-      sortByPriceLowToHigh
-    );
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 5;
@@ -175,7 +163,7 @@ export const searchGig = catchAsync(async (req, res, next) => {
     // Execute the search query
     const gigs = await Gig.find(query)
       .sort(sort)
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .skip((page - 1) * limit)
       .limit(limit);
 
@@ -190,5 +178,20 @@ export const searchGig = catchAsync(async (req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+//get single user gigs, by postedBy id
+export const getSingleUserGigs = catchAsync(async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userGigs = await Gig.find({ postedBy: id })
+      .sort({ createdAt: -1 })
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
+      .exec();
+    res.status(200).json({ userGigs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get user gigs" });
   }
 });

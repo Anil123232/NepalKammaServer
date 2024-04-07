@@ -113,7 +113,6 @@ export const getLastMessage = catchAsync(async (req, res, next) => {
 
 export const setRead = catchAsync(async (req, res, next) => {
   try {
-    console.log("hitted read");
     const id = req.params.id;
     await MessageModel.updateMany(
       { conversationId: id, recipientId: req.user._id },
@@ -132,7 +131,6 @@ export const getUnreadMessageCount = catchAsync(async (req, res, next) => {
       recipientId: req.user._id,
       isRead: false,
     });
-    console.log(result);
     res.status(200).json({ result: result.length });
   } catch (err) {
     res.status(500).json({ message: "Failed to get unread message count" });

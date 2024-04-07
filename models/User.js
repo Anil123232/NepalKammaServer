@@ -81,6 +81,10 @@ const UserInfoSchema = new mongoose.Schema(
     isVerified: {
       type: Boolean,
     },
+    fcm_token: {
+      type: String,
+      default: null,
+    },
     phoneNumber: {
       type: String,
       default: "",
@@ -90,6 +94,34 @@ const UserInfoSchema = new mongoose.Schema(
       enum: ["Pending", "verified", "is_not_verified"],
       default: "is_not_verified",
     },
+    mileStone: {
+      type: Number,
+      default: 0,
+    },
+    totalAmountPaid: {
+      type: Number,
+      default: 0,
+    },
+    totalCompletedJobs: {
+      type: Number,
+      default: 0,
+    },
+    totalIncome: {
+      type: Number,
+      default: 0,
+    },
+    onlineStatus: {
+      type: Boolean,
+      default: false,
+    },
+    can_review: [
+      {
+        user: {
+          type: String,
+          default: "",
+        },
+      },
+    ],
     documents: [
       {
         public_id: {

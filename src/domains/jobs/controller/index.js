@@ -1,6 +1,9 @@
 import catchAsync from "../../../utils/catchAsync.js";
 import Job from "../../../../models/Job.js";
 import recommendJobs from "../helper/JobRecommendation.js";
+import NotificationModel from "../../../../models/Notification.js";
+import User from "../../../../models/User.js";
+import { emitNotification } from "../../../../socketHandler.js";
 
 //create job
 export const createJob = catchAsync(async (req, res, next) => {
@@ -34,6 +37,92 @@ export const createJob = catchAsync(async (req, res, next) => {
     });
 
     await jobData.save();
+
+    // Create notifications for job seekers with matching skills
+    const jobSeekers = await User.find({
+      role: "job_seeker",
+      skills: { $in: skills_required },
+    });
+
+    const notifications = await Promise.all(
+      jobSeekers.map(async (jobSeeker) => {
+        const sender = await User.findById(req.user._id);
+        return {
+          senderId: req.user._id,
+          senderUsername: sender.username,
+          senderProfilePic: sender.profilePic?.url,
+          recipientId: jobSeeker._id,
+          jobId: jobData._id,
+          notification: `${title} - ${job_description}`,
+          type: "job_posted",
+          onlineStatus: sender.onlineStatus,
+        };
+      })
+    );
+    await NotificationModel.insertMany(notifications);
+    notifications.forEach((notification) => {
+      if (notification.onlineStatus) {
+        emitNotification(req.io, notification.recipientId.toString(), {
+          senderId: notification.senderId,
+          recipientId: notification.recipientId,
+          notification: notification.notification,
+          profilePic: notification.senderProfilePic,
+          senderUsername: notification.senderUsername,
+          type: "job_posted",
+        });
+      }
+    });
+
+    // Create notifications for nearby job seekers
+    const nearbyJobSeekers = await User.aggregate([
+      {
+        $geoNear: {
+          near: {
+            type: "Point",
+            coordinates: [parseFloat(longitude), parseFloat(latitude)],
+          },
+          key: "address.coordinates",
+          maxDistance: 10000, // 10km
+          distanceField: "distance",
+          spherical: true,
+        },
+      },
+      {
+        $match: {
+          role: "job_seeker",
+        },
+      },
+    ]);
+
+    const locationNotifications = await Promise.all(
+      nearbyJobSeekers.map(async (jobSeeker) => {
+        const sender = await User.findById(req.user._id);
+        return {
+          senderId: req.user._id,
+          senderUsername: sender.username,
+          senderProfilePic: sender.profilePic?.url,
+          recipientId: jobSeeker._id,
+          jobId: jobData._id,
+          notification: `${title} - ${job_description}`,
+          type: "job_posted_location",
+          onlineStatus: sender.onlineStatus,
+        };
+      })
+    );
+    await NotificationModel.insertMany(locationNotifications);
+    locationNotifications.forEach((notification) => {
+      if (notification.onlineStatus) {
+        emitNotification(req.io, notification.recipientId.toString(), {
+          senderId: notification.senderId,
+          recipientId: notification.recipientId,
+          notification: notification.notification,
+          profilePic: notification.senderProfilePic,
+          senderUsername: notification.senderUsername,
+          type: "job_posted_location",
+        });
+      }
+    });
+
     res.status(201).json({ message: "Successfully! created" });
   } catch (err) {
     console.error(err);
@@ -53,7 +142,7 @@ export const getJob = catchAsync(async (req, res, next) => {
     // Find jobs for the current page using skip and limit
     const job = await Job.find()
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .skip(startIndex)
       .limit(limit)
       .exec();
@@ -102,7 +191,7 @@ export const nearBy = catchAsync(async (req, res, next) => {
     // Populate the referenced fields using find()
     const populatedJobs = await Job.find({ _id: { $in: jobIds } })
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .exec();
 
     res.status(200).json({ nearBy: populatedJobs });
@@ -125,7 +214,7 @@ export const recommendationJobs = async (req, res, next) => {
     // Populate the referenced fields using find()
     const populatedJobs = await Job.find({ _id: { $in: jobIds } })
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .exec();
 
     res.status(200).json({ recommendJobsList: populatedJobs });
@@ -148,17 +237,6 @@ export const searchJob = catchAsync(async (req, res, next) => {
       sortByPriceHighToLow,
       sortByPriceLowToHigh,
     } = req.query;
-
-    console.log(
-      text,
-      category,
-      lng,
-      lat,
-      distance,
-      sortByRating,
-      sortByPriceHighToLow,
-      sortByPriceLowToHigh
-    );
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 5;
@@ -201,7 +279,7 @@ export const searchJob = catchAsync(async (req, res, next) => {
     // Execute the search query
     const jobs = await Job.find(query)
       .sort(sort)
-      .populate("postedBy", "username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
       .skip((page - 1) * limit)
       .limit(limit);
 
@@ -238,7 +316,6 @@ export const updateJobStatus = catchAsync(async (req, res, next) => {
     job.job_status = job_status;
     job.assignedTo = assignedTo;
     const userJobs = await job.save();
-    console.log(userJobs);
 
     res.status(200).json({ message: "Job status updated", userJobs });
   } catch (error) {
@@ -255,8 +332,11 @@ export const completedJobs = catchAsync(async (req, res, next) => {
       job_status: "Completed",
     })
       .sort({ createdAt: -1 })
-      .populate("postedBy", "username email profilePic")
-      .populate("assignedTo", "_id username email profilePic")
+      .populate("postedBy", "username email profilePic onlineStatus can_review")
+      .populate(
+        "assignedTo",
+        "_id username email profilePic onlineStatus can_review"
+      )
       .exec();
 
     // Get total number of jobs

@@ -4,7 +4,9 @@ import {
   createPayment,
   getPaymentByProvider,
   requestPayment,
+  updateKhaltiNumber,
 } from "../domains/payment/controller/index.js";
+import { multipleUpload } from "../domains/auth/middlewares/Multer.js";
 const router = express.Router();
 
 router
@@ -17,6 +19,10 @@ router
 
 router
   .route("/requestPayment/:id")
-  .put(protect, permission(["job_seeker"]), requestPayment);
+  .put(protect, permission(["job_seeker"]), multipleUpload, requestPayment);
+
+router
+  .route("/updateKhalitNumber/:id")
+  .put(protect, permission(["job_seeker"]), updateKhaltiNumber);
 
 export default router;

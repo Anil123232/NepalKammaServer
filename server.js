@@ -15,6 +15,9 @@ import path from "path";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 
+//firebase
+import firebase from "./src/firebase/index.js";
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -26,6 +29,28 @@ cloudinary.v2.config({
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_SECRET,
+});
+
+import socketHandler from "./socketHandler.js";
+
+// socket IO implementation
+import { createServer } from "http";
+import { Server } from "socket.io";
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  // cors: {
+  //   origin: "http://localhost:8081",
+  //   methods: ["GET", "POST"],
+  // },
+});
+
+socketHandler(io);
+
+//middleware
+app.use((req, res, next) => {
+  req.io = io;
+  next();
 });
 
 // routes for user
@@ -56,81 +81,13 @@ app.use("/api/v1/admin", Admin);
 import Payment from "./src/routes/Payment.js";
 app.use("/api/v1/payment", Payment);
 
-// socket IO implementation
-import { createServer } from "http";
-import { Server } from "socket.io";
-import MessageModel from "./models/Message.js";
+//routes for review
+import Review from "./src/routes/Review.js";
+app.use("/api/v1/review", Review);
 
-const httpServer = createServer(app);
-
-const io = new Server(httpServer, {
-  // cors: {
-  //   origin: "http://localhost:8081",
-  //   methods: ["GET", "POST"],
-  // },
-});
-
-const onlineUsers = [];
-
-const addNewUser = (userId, socketId) => {
-  if (!onlineUsers.some((user) => user.userId === userId)) {
-    onlineUsers.push({ userId, socketId });
-    io.emit("getU", onlineUsers); // Emit updated onlineUsers array
-  }
-};
-
-const removeUser = (socketId) => {
-  const index = onlineUsers.findIndex((user) => user.socketId === socketId);
-  if (index !== -1) {
-    onlineUsers.splice(index, 1);
-    io.emit("getU", onlineUsers); // Emit updated onlineUsers array
-  }
-};
-
-const getUser = (userId) => {
-  return onlineUsers.find((user) => user.userId === userId);
-};
-
-// Socket Connection
-io.on("connection", (socket) => {
-  console.log(socket.id, "connected.");
-
-  socket.on("addUser", (data) => {
-    console.log(data.username, "is online.");
-    addNewUser(data.userId, socket.id);
-    console.log(onlineUsers);
-  });
-
-  socket.on("getOnlineUsers", (data) => {
-    io.emit("getU", onlineUsers);
-  });
-
-  socket.on("conversationOpened", ({ conversationId, senderId }) => {
-    console.log(conversationId, senderId, "conversation opened.");
-    MessageModel.updateMany(
-      { conversationId: conversationId, senderId: { $ne: senderId } },
-      { isRead: true }
-    );
-  });
-
-  // for messages
-  socket.on("textMessage", ({ sender, receiver, message, conversationId }) => {
-    console.log(sender, receiver, message, "message received.");
-    const socketIdReceiver = getUser(receiver);
-    if (socketIdReceiver) {
-      io.to(socketIdReceiver.socketId).emit("textMessageFromBack", {
-        sender,
-        receiver,
-        message,
-        conversationId,
-      });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    removeUser(socket.id);
-  });
-});
+//routes for notification
+import Notification from "./src/routes/Notification.js";
+app.use("/api/v1/notification", Notification);
 
 //khalti payment gateway
 app.post("/charge", function (req, res) {
@@ -145,7 +102,7 @@ app.post("/charge", function (req, res) {
       amount: req.body.amount,
     }),
     headers: {
-      Authorization: `Key test_secret_key_145d56666e594324b894aef5e899160f`,
+      Authorization: `Key ${process.env.TEST_SECRET_KEY}`,
       "Content-Type": "application/json",
     },
   };
@@ -170,5 +127,21 @@ app.get("/", (req, res) => {
     message: "Welcome to the application.",
   });
 });
+
+// const sendNotification = async () => {
+//   try{
+//     await firebase.messaging().send({
+//       token: "claJf9cwR12PssaDlibeEu:APA91bEFZRdEtc5fDjfwWGHOBUX9345IAXvUzItzdwdfVOL_KT_n9uG03JL7J5_Mb7P7IEZop8JRX081IM_kOTZ2dbLlHWG8tRqxKSpZLtGWYbno71CODE3MyHsIL8XoDIPpuyu4Uq71",
+//       notification: {
+//         title: "Hello",
+//         body: "World",
+//       },
+//     });
+//     console.log("Notification sent successfully.");
+//   }catch(err){
+//     console.log("Error sending notification.");
+//     console.error(err);
+//   }
+// }
 
 httpServer.listen(8000, () => console.log("App is listening on port 8000."));

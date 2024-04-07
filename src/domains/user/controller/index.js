@@ -12,7 +12,7 @@ import Job from "../../../../models/Job.js";
 //create user --> signup
 export const createUser = catchAsync(async (req, res, next) => {
   try {
-    const { username, email, password, role, gender } = req.body;
+    const { username, email, password, role, gender, fcm_token } = req.body;
     const findEmail = await User.findOne({ email });
     const findUsername = await User.findOne({ username });
 
@@ -35,6 +35,7 @@ export const createUser = catchAsync(async (req, res, next) => {
       role,
       gender,
       isVerified: false,
+      fcm_token,
     });
 
     await signupUser
@@ -140,7 +141,10 @@ export const resendOTP = catchAsync(async (req, res, next) => {
 // login user --> login
 // login user --> login
 export const LoginUser = catchAsync(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password, fcm_token } = req.body;
+  if (!email || !password) {
+    return res.status(422).json({ message: "Something went wrong" });
+  }
   const findEmail = await User.findOne({ email });
   if (!findEmail || findEmail == null) {
     return res.status(422).json({ message: "Email not found" });
@@ -156,6 +160,8 @@ export const LoginUser = catchAsync(async (req, res, next) => {
             if (err) {
               return res.status(404).json({ message: "You must login first" });
             }
+            findEmail.fcm_token = fcm_token;
+            findEmail.save();
             const userWithoutPassword = {
               ...findEmail._doc,
               password: undefined,
@@ -252,7 +258,6 @@ export const updateProfilePicController = async (req, res) => {
 export const updatePhoneNumber = async (req, res) => {
   try {
     const { phone } = req.body;
-    console.log(phone);
     const existingUser = await User.findOne({
       phoneNumber: phone,
       _id: { $ne: req.user._id },
@@ -265,7 +270,6 @@ export const updatePhoneNumber = async (req, res) => {
     }
 
     const user = await User.findById(req.user._id);
-    console.log(user);
     user.phoneNumber = phone;
     await user.save();
     res.status(200).send({
@@ -319,8 +323,8 @@ export const getSingleUser = catchAsync(async (req, res, next) => {
 
     // Get all jobs posted by the user
     const userJobs = await Job.find({ postedBy: userId })
-      .populate("postedBy", "username email profilePic")
-      .populate("assignedTo", "username email profilePic");
+      .populate("postedBy", "username email profilePic onlineStatus")
+      .populate("assignedTo", "username email profilePic onlineStatus");
 
     res.status(200).json({ user, userJobs });
   } catch (err) {
@@ -388,5 +392,28 @@ export const searchUser = catchAsync(async (req, res, next) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to search user" });
+  }
+});
+
+// count jobs posted by job providers
+export const countAll = catchAsync(async (req, res, next) => {
+  try {
+    const { jobProviderId } = req.params;
+    const jobProvider = await User.findById(jobProviderId);
+    if (!jobProvider) {
+      return res.status(404).json({ message: "Job provider not found" });
+    }
+    const totalJobsbyProvider = await Job.countDocuments({
+      postedBy: jobProviderId,
+    });
+    const InprogressJobs = await Job.countDocuments({
+      postedBy: jobProviderId,
+      job_status: "In_Progress",
+    });
+
+    res.status(200).json({ totalJobsbyProvider, InprogressJobs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to count all" });
   }
 });

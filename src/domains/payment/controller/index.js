@@ -1,18 +1,18 @@
 import Payment from "../../../../models/Payment.js";
+import { getDataUris } from "../../../utils/Features.js";
 import catchAsync from "../../../utils/catchAsync.js";
+import cloudinary from "cloudinary";
 
 //create payment
 export const createPayment = catchAsync(async (req, res, next) => {
   try {
     const { PaymentBy, PaymentTo, job, amount } = req.body;
-    console.log("hitted payment controller");
     const payment = await Payment.create({
       PaymentBy,
       PaymentTo,
       job,
       amount,
     });
-    console.log("payment", payment);
     res.status(200).json(payment);
   } catch (err) {
     console.error(err);
@@ -46,12 +46,40 @@ export const getPaymentByProvider = catchAsync(async (req, res, next) => {
 //request payment update payment_status to request_payment
 export const requestPayment = catchAsync(async (req, res, next) => {
   try {
-    const payment = await Payment.findByIdAndUpdate(req.params.id, {
-      paymentStatus: "request_payment",
-    });
+    const files = getDataUris(req.files);
+
+    const payment = await Payment.findById(req.params.id);
+    const images = [];
+    for (let i = 0; i < files.length; i++) {
+      const fileData = files[i];
+      const cdb = await cloudinary.v2.uploader.upload(fileData, {});
+      images.push({
+        public_id: cdb.public_id,
+        url: cdb.secure_url,
+      });
+    }
+
+    payment.confirmation_image = images;
+    payment.paymentStatus = "request_payment";
+    await payment.save();
+
     res.status(200).json(payment);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to request payment" });
+  }
+});
+
+//update khaltinumber
+export const updateKhaltiNumber = catchAsync(async (req, res, next) => {
+  try {
+    const { recieverNumber } = req.body;
+    const payment = await Payment.findById(req.params.id);
+    payment.recieverNumber = recieverNumber;
+    await payment.save();
+    res.status(200).json(payment);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to update khalti number" });
   }
 });

@@ -12,13 +12,14 @@ import {
   getAllJobSeekers,
   nearByJobSeekers,
   searchUser,
+  countAll,
 } from "../domains/user/controller/index.js";
 import {
   loginValidation,
   signUpValidation,
   signupValidationResult,
 } from "../validators/UserValidators.js";
-import { protect } from "../domains/auth/middlewares/auth.js";
+import { permission, protect } from "../domains/auth/middlewares/auth.js";
 import {
   multipleUpload,
   singleUpload,
@@ -61,5 +62,10 @@ router
 
 //search user by username
 router.route(`/search-user/:username`).get(protect, searchUser);
+
+//count jobs posted by job providers
+router
+  .route(`/count-job-posted/:jobProviderId`)
+  .get(protect, permission(["job_provider"]), countAll);
 
 export default router;
