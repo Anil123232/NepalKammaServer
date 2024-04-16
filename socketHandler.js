@@ -25,13 +25,15 @@ const addNewUser = async (userId, socketId) => {
 const removeUser = async (socketId) => {
   try {
     const index = onlineUsers.findIndex((user) => user.socketId === socketId);
+
     if (index !== -1) {
       const userId = onlineUsers[index].userId;
       const user = await User.findById(userId);
+
       if (user) {
         console.log(user.username, "is offline.");
         user.onlineStatus = false;
-        await user.save(); // Update the user's online status in the database
+        await user.save();
         onlineUsers.splice(index, 1);
         io.emit("getU", onlineUsers);
       }
@@ -47,7 +49,6 @@ const getUser = (userId) => {
 
 export const emitNotification = (io, recipientId, notification) => {
   const recipient = getUser(recipientId);
-  console.log("recipient", recipient);
   if (recipient && recipient.socketId) {
     io.to(recipient.socketId).emit(
       "notificationForLocationAndRecommend",
@@ -60,8 +61,19 @@ export const emitNotification = (io, recipientId, notification) => {
   }
 };
 
-// Socket Connection
+export const emitAccountDeactivation = (io, recipientId) => {
+  const recipient = getUser(recipientId);
+  if (recipient && recipient.socketId) {
+    console.log("accountdeactivate", recipientId, recipient.socketId);
+    io.to(recipient.socketId).emit("accountDeactivation");
+  } else {
+    console.log(
+      `User ${recipientId} is not connected to the Socket.IO server.`
+    );
+  }
+};
 
+// Socket Connection
 export default (socketIo) => {
   io = socketIo;
 

@@ -34,7 +34,8 @@ export const signUpValidation = [
     .withMessage("Role must be a string")
     .isIn(["job_provider", "job_seeker", "admin"])
     .withMessage("Role must be either user or admin"),
-  check("fcm_token").trim().not().isEmpty().withMessage("Something went wrong"),
+  check("fcm_token").trim(),
+  check("security_answer").trim().not().isEmpty().withMessage("Security answer is required")
 ];
 
 export const loginValidation = [

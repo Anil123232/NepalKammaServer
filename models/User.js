@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+const Schema = mongoose.Schema;
 
 const UserInfoSchema = new mongoose.Schema(
   {
@@ -113,6 +114,17 @@ const UserInfoSchema = new mongoose.Schema(
     onlineStatus: {
       type: Boolean,
       default: false,
+    },
+    security_answer: {
+      type: String,
+      default: "",
+    },
+    savedPostJob: [{ type: Schema.Types.ObjectId, ref: "Job" }],
+    savedPostGig: [{ type: Schema.Types.ObjectId, ref: "Gig" }],
+    userAccountStatus: {
+      type: String,
+      enum: ["Active", "Deactivated"],
+      default: "Active",
     },
     can_review: [
       {

@@ -2,6 +2,7 @@ import Review from "../../../../models/Review.js";
 import User from "../../../../models/User.js";
 import { emitNotification } from "../../../../socketHandler.js";
 import catchAsync from "../../../utils/catchAsync.js";
+import firebase from "../../../firebase/index.js";
 
 //create payment
 export const createReview = catchAsync(async (req, res, next) => {
@@ -15,8 +16,12 @@ export const createReview = catchAsync(async (req, res, next) => {
     });
 
     const reviewedByUser = await User.findById(reviewedBy);
+    const reviewedToUser = await User.findById(reviewedTo);
     // Check if the user was found and has a profile picture
     if (!reviewedByUser || !reviewedByUser.profilePic.url) {
+      return res(400).json({ message: "Something went wrong" });
+    }
+    if (!reviewedToUser) {
       return res(400).json({ message: "Something went wrong" });
     }
 
@@ -28,6 +33,25 @@ export const createReview = catchAsync(async (req, res, next) => {
       senderUsername: reviewedByUser.username,
       type: "review",
     });
+
+    const sendNotification = async () => {
+      try {
+        await firebase.messaging().send({
+          token: reviewedToUser?.fcm_token,
+          notification: {
+            title: "Someone reviwed you 🎆😍",
+            body: review,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    if(reviewedToUser.fcm_token){
+      await sendNotification();
+    }
+
     res.status(200).json(getReview);
   } catch (err) {
     console.error(err);

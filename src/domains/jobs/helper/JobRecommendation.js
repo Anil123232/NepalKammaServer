@@ -48,7 +48,7 @@ const recommendJobs = async (userId) => {
       (a, b) => b.similarityScore - a.similarityScore
     );
 
-    const minimumSimilarityScore = 1;
+    const minimumSimilarityScore = 0.6;
     const filteredJobs = sortedJobs.filter(
       (job) => job.similarityScore >= minimumSimilarityScore
     );
@@ -58,6 +58,7 @@ const recommendJobs = async (userId) => {
       const matchedJob = jobs.find((j) => j._id.toString() === id.toString());
       return { ...matchedJob.toObject(), similarityScore };
     });
+
     return recommendedJobs;
   } catch (err) {
     res.status(500).json({ message: "Failed to recommend jobs" });

@@ -34,6 +34,8 @@ router
   .route(`/updateJobStatus/:jobId`)
   .put(protect, permission(["job_provider"]), updateJobStatus);
 
-router.route(`/completedJobs`).get(protect, permission(["job_provider"]), completedJobs);
+router
+  .route(`/completedJobs`)
+  .get(protect, permission(["job_provider"]), completedJobs);
 
 export default router;

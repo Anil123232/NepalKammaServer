@@ -35,6 +35,11 @@ const GigInfoSchema = new mongoose.Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    visibility: {
+      type: String,
+      enum: ["public", "private"],
+      default: "public",
+    },
   },
   {
     timestamps: true,

@@ -68,6 +68,15 @@ const JobInfoSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+    experiesIn: {
+      type: Date,
+      required: true,
+    },
+    visibility: {
+      type: String,
+      enum: ["public", "private"],
+      default: "public",
+    },
   },
   {
     timestamps: true,

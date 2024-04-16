@@ -12,7 +12,15 @@ import Job from "../../../../models/Job.js";
 //create user --> signup
 export const createUser = catchAsync(async (req, res, next) => {
   try {
-    const { username, email, password, role, gender, fcm_token } = req.body;
+    const {
+      username,
+      email,
+      password,
+      role,
+      gender,
+      fcm_token,
+      security_answer,
+    } = req.body;
     const findEmail = await User.findOne({ email });
     const findUsername = await User.findOne({ username });
 
@@ -27,6 +35,7 @@ export const createUser = catchAsync(async (req, res, next) => {
     }
 
     const hashedPassword = await hashPassword(password);
+    const hashedSecurityAnswer = await hashPassword(security_answer);
 
     const signupUser = new User({
       email,
@@ -36,6 +45,7 @@ export const createUser = catchAsync(async (req, res, next) => {
       gender,
       isVerified: false,
       fcm_token,
+      security_answer: hashedSecurityAnswer,
     });
 
     await signupUser
@@ -139,7 +149,6 @@ export const resendOTP = catchAsync(async (req, res, next) => {
 });
 
 // login user --> login
-// login user --> login
 export const LoginUser = catchAsync(async (req, res, next) => {
   const { email, password, fcm_token } = req.body;
   if (!email || !password) {
@@ -152,6 +161,11 @@ export const LoginUser = catchAsync(async (req, res, next) => {
     if (findEmail.isVerified === true) {
       const decryptPass = await bcrypt.compare(password, findEmail.password);
       if (decryptPass) {
+        if (findEmail.userAccountStatus !== "Active") {
+          return res.status(401).json({
+            message: "Your account is inactive. Please contact the admin.",
+          });
+        }
         jwt.sign(
           { userId: findEmail._id },
           process.env.SECRET_KEY,
@@ -182,6 +196,47 @@ export const LoginUser = catchAsync(async (req, res, next) => {
     } else {
       return res.status(422).json({ message: "Your email is not verified!" });
     }
+  }
+});
+
+//forget password
+export const forgetPassword = catchAsync(async (req, res, next) => {
+  try {
+    const { email, security_answer, password } = req.body;
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "Email not found" });
+    }
+
+    const isSecurityAnswerValid = await bcrypt.compare(
+      security_answer,
+      user.security_answer
+    );
+
+    if (!isSecurityAnswerValid) {
+      return res.status(422).json({ message: "Security answer is incorrect" });
+    }
+
+    const hashedPassword = await hashPassword(password);
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to reset password" });
+  }
+});
+
+//logout user
+export const logoutUser = catchAsync(async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id);
+    user.fcm_token = "";
+    user.onlineStatus = false;
+    await user.save();
+    res.status(200).json({ message: "Successfully, logged out" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to logout" });
   }
 });
 
@@ -313,7 +368,7 @@ export const uploadDocuments = catchAsync(async (req, res, next) => {
   }
 });
 
-//get single user
+//get single user --> job seeker
 export const getSingleUser = catchAsync(async (req, res, next) => {
   try {
     const userId = req.params.id;
@@ -322,9 +377,29 @@ export const getSingleUser = catchAsync(async (req, res, next) => {
     const user = await User.findById(userId).select("-password");
 
     // Get all jobs posted by the user
+    const userJobs = await Job.find({ postedBy: userId, visibility: "public" })
+      .populate("postedBy", "-password -documents -isVerified")
+      .populate("assignedTo", "-password -documents -isVerified ");
+
+    res.status(200).json({ user, userJobs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get user and their jobs" });
+  }
+});
+
+// get single user --> job provider
+export const getSingleUserProvider = catchAsync(async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+
+    // Get user details excluding password
+    const user = await User.findById(userId).select("-password");
+
+    // Get all jobs posted by the user
     const userJobs = await Job.find({ postedBy: userId })
-      .populate("postedBy", "username email profilePic onlineStatus")
-      .populate("assignedTo", "username email profilePic onlineStatus");
+      .populate("postedBy", "-password -documents -isVerified")
+      .populate("assignedTo", "-password -documents -isVerified ");
 
     res.status(200).json({ user, userJobs });
   } catch (err) {
@@ -336,9 +411,21 @@ export const getSingleUser = catchAsync(async (req, res, next) => {
 // get all users who are job seekers
 export const getAllJobSeekers = catchAsync(async (req, res, next) => {
   try {
-    const users = await User.find({ role: "job_seeker" }).select(
-      "-password -documents"
-    );
+    const searchQuery = req.query.search;
+    let query = { role: "job_seeker" };
+
+    if (searchQuery) {
+      query.$or = [
+        { username: { $regex: searchQuery, $options: "i" } },
+        { email: { $regex: searchQuery, $options: "i" } },
+      ];
+    }
+
+    const users = await User.find(query).select("-password -documents");
+
+    if (users.length === 0) {
+      return res.status(200).json({ message: "No users found" });
+    }
 
     res.status(200).json({ users });
   } catch (err) {
@@ -415,5 +502,130 @@ export const countAll = catchAsync(async (req, res, next) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to count all" });
+  }
+});
+
+//save and unsave post job
+export const saveJob = catchAsync(async (req, res, next) => {
+  try {
+    const postId = req.params.id;
+    const myId = req.user._id;
+
+    const currentUser = await User.findById(myId).select(
+      "-password -isVerified -email"
+    );
+
+    if (currentUser.savedPostJob.includes(postId)) {
+      res.status(422).json({ message: "This post is already saved" });
+    }
+
+    const postStatus = await Job.findById(postId);
+    if (postStatus.visibility === "private") {
+      res.status(422).json({ message: "This post is private" });
+    }
+
+    if (!currentUser.savedPostJob.includes(postId)) {
+      const response = await User.findByIdAndUpdate(
+        myId,
+        { $addToSet: { savedPostJob: postId } },
+        { new: true }
+      ).select("-password -isVerified -email");
+      res.status(200).json({ message: "Job successfully saved! " });
+    }
+  } catch (err) {
+    res.status(422).json({ message: err.message });
+  }
+});
+
+//unsaved post
+export const unsaveJob = catchAsync(async (req, res, next) => {
+  try {
+    const postId = req.params.id;
+    const myId = req.user._id;
+
+    const currentUser = await User.findById(myId).select(
+      "-password -isVerified -email"
+    );
+
+    if (!currentUser.savedPostJob.includes(postId)) {
+      res.status(422).json({ message: "This post is not saved" });
+    } else {
+      const response = await User.findByIdAndUpdate(
+        myId,
+        { $pull: { savedPostJob: postId } },
+        { new: true }
+      ).select("-password -isVerified -email");
+      res.status(200).json({ message: "Job removed from saved list" });
+    }
+  } catch (err) {
+    res.status(422).json({ message: err.message });
+  }
+});
+
+//get all saved jobs
+export const getSavedJobs = catchAsync(async (req, res, next) => {
+  try {
+    const myId = req.user._id;
+    const currentUser = await User.findById(myId)
+      .populate({
+        path: "savedPostJob",
+        options: { sort: { createdAt: -1 } },
+        populate: {
+          path: "postedBy",
+          model: "User",
+        },
+      })
+      .exec();
+
+    const visibleSavedJobs = currentUser.savedPostJob.filter(
+      (job) => job.visibility === "public"
+    );
+
+    res.status(200).json({ savedPosts: visibleSavedJobs });
+  } catch (err) {
+    res.status(422).json({ message: err.message });
+  }
+});
+
+export const getTopRatedJobProviders = catchAsync(async (req, res) => {
+  try {
+    const topRatedJobProviders = await User.aggregate([
+      {
+        $match: {
+          role: "job_provider",
+          isDocumentVerified: "verified",
+        },
+      },
+      {
+        $lookup: {
+          from: "reviews",
+          localField: "_id",
+          foreignField: "reviewedTo",
+          as: "reviews",
+        },
+      },
+      {
+        $addFields: {
+          averageRating: {
+            $avg: "$reviews.rating",
+          },
+        },
+      },
+      {
+        $sort: {
+          averageRating: -1,
+        },
+      },
+      {
+        $project: {
+          password: 0,
+          fcm_token: 0,
+        },
+      },
+    ]);
+
+    res.status(200).json(topRatedJobProviders);
+  } catch (err) {
+    res.status(422).json({ message: err.message });
   }
 });

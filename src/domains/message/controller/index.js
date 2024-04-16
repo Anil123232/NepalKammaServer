@@ -1,6 +1,8 @@
 import catchAsync from "../../../utils/catchAsync.js";
 import ConversationModel from "../../../../models/Conversation.js";
 import MessageModel from "../../../../models/Message.js";
+import firebase from "../../../firebase/index.js";
+import User from "../../../../models/User.js";
 
 export const createConversation = catchAsync(async (req, res, next) => {
   try {
@@ -60,13 +62,33 @@ export const createMessage = catchAsync(async (req, res, next) => {
     const conversationId = req.body.conversationId;
     const msg = req.body.msg;
     const recipientId = req.body.recipientId;
-    const messages = new MessageModel({
+    const messages = await MessageModel.create({
       senderId,
       conversationId,
       msg,
       recipientId,
     });
-    await messages.save();
+
+    const senderUser = await User.findById(senderId);
+    const recipientUser = await User.findById(recipientId);
+
+    const sendNotification = async () => {
+      try {
+        await firebase.messaging().send({
+          token: recipientUser?.fcm_token,
+          notification: {
+            title: `${senderUser?.username} messaged you 🎆💬`,
+            body: msg,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    if (recipientUser?.fcm_token) {
+      await sendNotification();
+    }
     res.status(200).json({ messages });
   } catch (err) {
     res.status(500).json({ message: "Failed to create new message" });
@@ -77,7 +99,10 @@ export const createMessage = catchAsync(async (req, res, next) => {
 export const getMessages = catchAsync(async (req, res, next) => {
   try {
     const id = req.params.id;
-    const result = await MessageModel.find({ conversationId: id });
+    const result = await MessageModel.find({ conversationId: id })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .exec();
     const conversation = await ConversationModel.findById(id)
       .populate({
         path: "conversation",

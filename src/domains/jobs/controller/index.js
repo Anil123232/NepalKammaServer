@@ -4,6 +4,7 @@ import recommendJobs from "../helper/JobRecommendation.js";
 import NotificationModel from "../../../../models/Notification.js";
 import User from "../../../../models/User.js";
 import { emitNotification } from "../../../../socketHandler.js";
+import firebase from "../../../firebase/index.js";
 
 //create job
 export const createJob = catchAsync(async (req, res, next) => {
@@ -19,7 +20,21 @@ export const createJob = catchAsync(async (req, res, next) => {
       payment_method,
       price,
       category,
+      experiesInHrs,
     } = req.body;
+
+    let experiesIndate = new Date();
+
+    if (experiesInHrs === 6) {
+      experiesIndate = new Date(new Date().getTime() + 6 * 60 * 60 * 1000);
+      // experiesIndate = new Date(new Date().getTime() + 0.5 * 60 * 1000);
+    } else if (experiesInHrs === 12) {
+      experiesIndate = new Date(new Date().getTime() + 12 * 60 * 60 * 1000);
+    } else if (experiesInHrs === 24) {
+      experiesIndate = new Date(new Date().getTime() + 24 * 60 * 60 * 1000);
+    } else {
+      return res.status(500).json({ message: "Invalid experiesInHrs" });
+    }
 
     const jobData = new Job({
       title,
@@ -34,6 +49,7 @@ export const createJob = catchAsync(async (req, res, next) => {
       price,
       category,
       postedBy: req.user._id,
+      experiesIn: experiesIndate,
     });
 
     await jobData.save();
@@ -56,6 +72,7 @@ export const createJob = catchAsync(async (req, res, next) => {
           notification: `${title} - ${job_description}`,
           type: "job_posted",
           onlineStatus: sender.onlineStatus,
+          fcm_token: jobSeeker.fcm_token,
         };
       })
     );
@@ -70,6 +87,29 @@ export const createJob = catchAsync(async (req, res, next) => {
           senderUsername: notification.senderUsername,
           type: "job_posted",
         });
+      }
+    });
+
+    const sendNotificationRecommendation = async (notification) => {
+      try {
+        await firebase.messaging().send({
+          token: notification?.fcm_token,
+          notification: {
+            title:
+              notification.senderUsername + ": Job Recommendation for you🎆😍",
+            body: title,
+          },
+        });
+      } catch (err) {
+
+        console.error(err);
+      }
+    };
+
+    // Send push notifications to job seekers with matching skills
+    notifications.forEach(async (notification) => {
+      if (notification.fcm_token) {
+        sendNotificationRecommendation(notification);
       }
     });
 
@@ -106,6 +146,7 @@ export const createJob = catchAsync(async (req, res, next) => {
           notification: `${title} - ${job_description}`,
           type: "job_posted_location",
           onlineStatus: sender.onlineStatus,
+          fcm_token: jobSeeker.fcm_token,
         };
       })
     );
@@ -120,6 +161,27 @@ export const createJob = catchAsync(async (req, res, next) => {
           senderUsername: notification.senderUsername,
           type: "job_posted_location",
         });
+      }
+    });
+
+    const sendNotificationNearBy = async (notification) => {
+      try {
+        await firebase.messaging().send({
+          token: notification?.fcm_token,
+          notification: {
+            title: `Job found in ${location}🎆😍`,
+            body: title,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    // Send push notifications to job seekers with matching skills
+    locationNotifications.forEach(async (notification) => {
+      if (notification.fcm_token) {
+        sendNotificationNearBy(notification);
       }
     });
 
@@ -140,7 +202,7 @@ export const getJob = catchAsync(async (req, res, next) => {
     const startIndex = (page - 1) * limit;
 
     // Find jobs for the current page using skip and limit
-    const job = await Job.find()
+    const job = await Job.find({ visibility: "public" })
       .sort({ createdAt: -1 })
       .populate("postedBy", "username email profilePic onlineStatus can_review")
       .skip(startIndex)
@@ -183,6 +245,9 @@ export const nearBy = catchAsync(async (req, res, next) => {
           spherical: true,
         },
       },
+      {
+        $match: { visibility: "public" },
+      },
     ]).exec();
 
     // Get the ids of the documents you want to populate
@@ -192,6 +257,7 @@ export const nearBy = catchAsync(async (req, res, next) => {
     const populatedJobs = await Job.find({ _id: { $in: jobIds } })
       .sort({ createdAt: -1 })
       .populate("postedBy", "username email profilePic onlineStatus can_review")
+      .limit(8)
       .exec();
 
     res.status(200).json({ nearBy: populatedJobs });
@@ -212,7 +278,10 @@ export const recommendationJobs = async (req, res, next) => {
     const jobIds = recommendJobsList.map((job) => job._id);
 
     // Populate the referenced fields using find()
-    const populatedJobs = await Job.find({ _id: { $in: jobIds } })
+    const populatedJobs = await Job.find({
+      _id: { $in: jobIds },
+      visibility: "public",
+    })
       .sort({ createdAt: -1 })
       .populate("postedBy", "username email profilePic onlineStatus can_review")
       .exec();
@@ -240,7 +309,7 @@ export const searchJob = catchAsync(async (req, res, next) => {
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 5;
-    let query = {};
+    let query = { visibility: "public" };
 
     if (text) {
       const regex = new RegExp(text, "i");
@@ -250,9 +319,22 @@ export const searchJob = catchAsync(async (req, res, next) => {
       ];
     }
 
-    const existingCategory = await Job.findOne({ category });
-    if (category && existingCategory) {
-      query.category = category;
+    if (category === "" || category === "All") {
+      // No need to add category to the query
+    } else {
+      const existingCategory = await Job.findOne({ category });
+      if (existingCategory) {
+        query.category = category;
+      } else {
+        // Return an empty array if the selected category does not exist
+        return res.status(200).json({
+          success: true,
+          job: [],
+          totalJobs: 0,
+          currentPage: page,
+          totalPages: 0,
+        });
+      }
     }
 
     // Define the sort order

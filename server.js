@@ -89,10 +89,12 @@ app.use("/api/v1/review", Review);
 import Notification from "./src/routes/Notification.js";
 app.use("/api/v1/notification", Notification);
 
+//routes for report
+import Report from "./src/routes/Report.js";
+app.use("/api/v1/report", Report);
+
 //khalti payment gateway
 app.post("/charge", function (req, res) {
-  // console.log(payload);
-
   var KHALTI_VERIFY = "https://khalti.com/api/v2/payment/verify/";
   let options = {
     method: "POST",
@@ -108,7 +110,6 @@ app.post("/charge", function (req, res) {
   };
   requestp(options)
     .then((result) => {
-      console.log("charged", result);
       res.jsonp({
         data: result,
         status: "success",
@@ -122,26 +123,16 @@ app.post("/charge", function (req, res) {
     });
 });
 
+import { updateJobVisibility } from "./src/utils/BackgroundTask.js";
+
+// Start the background task for updating job visibility
+updateJobVisibility();
+
 app.get("/", (req, res) => {
   res.json({
     message: "Welcome to the application.",
   });
 });
 
-// const sendNotification = async () => {
-//   try{
-//     await firebase.messaging().send({
-//       token: "claJf9cwR12PssaDlibeEu:APA91bEFZRdEtc5fDjfwWGHOBUX9345IAXvUzItzdwdfVOL_KT_n9uG03JL7J5_Mb7P7IEZop8JRX081IM_kOTZ2dbLlHWG8tRqxKSpZLtGWYbno71CODE3MyHsIL8XoDIPpuyu4Uq71",
-//       notification: {
-//         title: "Hello",
-//         body: "World",
-//       },
-//     });
-//     console.log("Notification sent successfully.");
-//   }catch(err){
-//     console.log("Error sending notification.");
-//     console.error(err);
-//   }
-// }
 
 httpServer.listen(8000, () => console.log("App is listening on port 8000."));

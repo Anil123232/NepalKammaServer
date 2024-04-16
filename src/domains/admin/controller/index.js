@@ -3,6 +3,10 @@ import Payment from "../../../../models/Payment.js";
 import catchAsync from "../../../utils/catchAsync.js";
 import Job from "../../../../models/Job.js";
 import Gig from "../../../../models/Gig.js";
+import Report from "../../../../models/Reports.js";
+import { emitAccountDeactivation } from "../../../../socketHandler.js";
+import { sendEmail } from "../helper/SendEmail.js";
+import firebase from "../../../firebase/index.js";
 
 //count all freelancers, job, gigs, and job_providers
 export const countAll = catchAsync(async (req, res, next) => {
@@ -47,10 +51,7 @@ export const getAllFreelancers = catchAsync(async (req, res, next) => {
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
 
-    const users = await User.find(query)
-      .sort(sort)
-      .skip(startIndex)
-      .limit(limit);
+    const users = await User.find(query).sort(sort).skip(startIndex);
 
     const totalUsers = await User.countDocuments(query);
     const totalPages = Math.ceil(totalUsers / limit);
@@ -96,10 +97,7 @@ export const getAllJobProviders = catchAsync(async (req, res, next) => {
     const startIndex = (page - 1) * limit;
     const endIndex = page * limit;
 
-    const users = await User.find(query)
-      .sort(sort)
-      .skip(startIndex)
-      .limit(limit);
+    const users = await User.find(query).sort(sort).skip(startIndex);
 
     const totalUsers = await User.countDocuments(query);
     const totalPages = Math.ceil(totalUsers / limit);
@@ -152,8 +150,7 @@ export const getAllPayments = catchAsync(async (req, res, next) => {
         },
       })
       .sort({ createdAt: -1 })
-      .skip(startIndex)
-      .limit(limit);
+      .skip(startIndex);
 
     const totalPayments = await Payment.countDocuments(query);
     const totalPages = Math.ceil(totalPayments / limit);
@@ -188,14 +185,42 @@ export const getAllJobs = catchAsync(async (req, res, next) => {
       .populate("assignedTo")
       .populate("postedBy")
       .sort(sort)
-      .skip(startIndex)
-      .limit(limit);
+      .skip(startIndex);
     const totalJobs = await Job.countDocuments(query);
     const totalPages = Math.ceil(totalJobs / limit);
     res.json({ jobs, currentPage: page, totalPages, totalJobs });
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to get all jobs" });
+  }
+});
+
+//get all gigs
+export const getAllGigs = catchAsync(async (req, res, next) => {
+  try {
+    const { assending } = req.query;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+    let query = {};
+
+    let sort = {};
+    if (assending === "true") {
+      sort.createdAt = -1;
+    } else {
+      sort.createdAt = 1;
+    }
+    const startIndex = (page - 1) * limit;
+    const endIndex = page * limit;
+    const gigs = await Gig.find(query)
+      .populate("postedBy")
+      .sort(sort)
+      .skip(startIndex);
+    const totalGigs = await Gig.countDocuments(query);
+    const totalPages = Math.ceil(totalGigs / limit);
+    res.json({ gigs, currentPage: page, totalPages, totalGigs });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get all gigs" });
   }
 });
 
@@ -224,7 +249,7 @@ export const completedPayment = catchAsync(async (req, res, next) => {
     await payment.save();
 
     jobProvider.totalAmountPaid += amount;
-    if (jobProvider.mileStone % 5 === 0) {
+    if ((jobProvider.totalCompletedJobs + 1) % 5 === 0) {
       jobProvider.mileStone += 1;
       jobProvider.totalCompletedJobs += 1;
     } else {
@@ -237,5 +262,206 @@ export const completedPayment = catchAsync(async (req, res, next) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Failed to complete payment" });
+  }
+});
+
+//verfiy document
+export const verifyDocument = catchAsync(async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(200).json({ message: "User not found!" });
+    }
+
+    user.isDocumentVerified = "verified";
+    sendEmail(user?.email);
+    await user.save();
+
+    res.status(200).json({ message: "User Successfully verified" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failded to verfified the user" });
+  }
+});
+
+//reject document
+export const rejectDocument = catchAsync(async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(200).json({ message: "User not found!" });
+    }
+
+    user.isDocumentVerified = "is_not_verified";
+    user.documents = [];
+    await user.save();
+
+    res.status(200).json({ message: "User document rejected" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failded to reject the user document" });
+  }
+});
+
+//get all reports
+export const getAllReports = catchAsync(async (req, res, next) => {
+  try {
+    const { assending } = req.query;
+    let sort = {};
+    if (assending === "true") {
+      sort.createdAt = -1;
+    } else {
+      sort.createdAt = 1;
+    }
+
+    const reports = await Report.find()
+      .populate("reportedBy")
+      .populate("reportedTo")
+      .sort(sort);
+
+    res.status(200).json({ reports });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get all reports" });
+  }
+});
+
+//deactivate user
+export const deactivateUser = catchAsync(async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(200).json({ message: "User not found!" });
+    }
+
+    user.userAccountStatus = "Deactivated";
+    user.onlineStatus = false;
+
+    await Job.updateMany(
+      { postedBy: userId },
+      { $set: { visibility: "private" } }
+    );
+    await Gig.updateMany(
+      { postedBy: userId },
+      { $set: { visibility: "private" } }
+    );
+
+    emitAccountDeactivation(req.io, userId.toString(), {
+      message: "Your account has been deactivated by the admin.",
+    });
+
+    await user.save();
+
+    res.status(200).json({ message: "User Successfully deactivated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failded to deactivate the user" });
+  }
+});
+
+//activate user
+export const activateUser = catchAsync(async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const user = await User.findById(userId);
+    if (!user) {
+      res.status(200).json({ message: "User not found!" });
+    }
+
+    user.userAccountStatus = "Active";
+    await user.save();
+
+    res.status(200).json({ message: "User Successfully activated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failded to activate the user" });
+  }
+});
+
+//get all the deactivate accounts
+export const getAllDeactivatedAccounts = catchAsync(async (req, res, next) => {
+  try {
+    const users = await User.find({ userAccountStatus: "Deactivated" });
+
+    res.status(200).json({ users });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get all deactivated accounts" });
+  }
+});
+
+//user growth
+export const getUserGrowth = catchAsync(async (req, res, next) => {
+  try {
+    const userGrowthData = await User.aggregate([
+      {
+        $match: {
+          createdAt: { $ne: null },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              format: "%Y-%m",
+              date: "$createdAt",
+            },
+          },
+          uv: { $sum: 1 },
+        },
+      },
+      {
+        $sort: {
+          _id: 1,
+        },
+      },
+    ]);
+
+    const response = userGrowthData.map((item) => ({
+      name: item._id,
+      uv: item.uv,
+      pv: 0,
+      amt: 0,
+    }));
+
+    res.status(200).json({ userGrowthData: response });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get user growth" });
+  }
+});
+
+//send push notification to all users
+export const sendPushNotification = catchAsync(async (req, res, next) => {
+  try {
+    const { message } = req.body;
+    const users = await User.find();
+
+    const sendPushNotification = async (fcm_token) => {
+      try {
+        await firebase.messaging().send({
+          token: fcm_token,
+          notification: {
+            title: "Message from NepalKamma🎈",
+            body: message,
+          },
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    users.forEach((user) => {
+      if (user.fcm_token) {
+        sendPushNotification(user.fcm_token);
+      }
+    });
+    res.status(200).json({ message: "Push notification sent successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to send push notification" });
   }
 });
