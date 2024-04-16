@@ -9,13 +9,13 @@ export const sendOTPVerificationEmail = async ({ _id, email }, res) => {
     const currentDate = Date.now();
     const expiresAt = new Date(currentDate + 180000);
     const transporter = nodemailer.createTransport({
-      host: "smtp.ethereal.email",
+      host: 'smtp.ethereal.email',
       port: 587,
       auth: {
-        user: "britney.swaniawski37@ethereal.email",
-        pass: "F6bhUVZ22uDD5ZCmtZ",
-      },
-    });
+          user: 'vergie67@ethereal.email',
+          pass: 'PATCkQNGCSVv3dXthH'
+      }
+  });
 
     let mailOptions = {
       from: "smtp.ethereal.email",

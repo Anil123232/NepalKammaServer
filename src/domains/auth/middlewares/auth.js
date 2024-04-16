@@ -3,6 +3,8 @@ import jwt from "jsonwebtoken";
 import catchAsync from "../../../utils/catchAsync.js";
 import createError from "../../..//utils/createError.js";
 import User from "../../../../models/User.js";
+import Gig from "../../../../models/Gig.js";
+import Job from "../../../../models/Job.js";
 
 export const protect = catchAsync(async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -14,7 +16,6 @@ export const protect = catchAsync(async (req, res, next) => {
   const token = authHeader.split(" ")[1];
   try {
     const decoded = jwt.verify(token, process.env.SECRET_KEY);
-    console.log(decoded);
     req.user = await User.findById(decoded.userId);
     next();
   } catch (err) {
@@ -31,3 +32,36 @@ export const permission = (roles) => (req, res, next) => {
     throw createError(403, "You are not allowed to access this route.");
   next();
 };
+
+export const checkAccountStatus = catchAsync(async (req, res, next) => {
+  const user = await User.findById(req.userId);
+  if (!user || user.userAccountStatus !== "Active") {
+    throw createError(
+      401,
+      "Your account is inactive. Please contact the admin."
+    );
+  }
+  req.user = user;
+  next();
+});
+
+export const checkVisibilityStatus = catchAsync(async (req, res, next) => {
+  const { gigId, jobId } = req.params;
+
+  let resource;
+  if (gigId) {
+    resource = await Gig.findById(gigId);
+  } else if (jobId) {
+    resource = await Job.findById(jobId);
+  }
+
+  if (!resource) {
+    throw createError(404, "Resource not found.");
+  }
+
+  if (resource.visibility !== "public") {
+    throw createError(403, "You are not authorized to access this resource.");
+  }
+
+  next();
+});

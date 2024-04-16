@@ -32,8 +32,10 @@ export const signUpValidation = [
     .withMessage("Role is required")
     .isString()
     .withMessage("Role must be a string")
-    .isIn(["job_provider", "job_seeker"])
+    .isIn(["job_provider", "job_seeker", "admin"])
     .withMessage("Role must be either user or admin"),
+  check("fcm_token").trim(),
+  check("security_answer").trim().not().isEmpty().withMessage("Security answer is required")
 ];
 
 export const loginValidation = [
@@ -46,6 +48,7 @@ export const loginValidation = [
     .isEmail()
     .withMessage("Invalid email address"),
   check("password").trim().not().isEmpty().withMessage("Password is required"),
+  check("fcm_token").trim(),
 ];
 
 export const signupValidationResult = (req, res, next) => {
